@@ -199,7 +199,7 @@ public:
     
                 if ((mem_address >= 0) && (mem_address < mem.size() * 4) && (mem_address % 4 == 0)) { 
                     registers[rd] = mem[mem_address / 4];
-                    cout << "Loaded " << registers[rd] << " from Mem[" << mem_address << "]\n";
+                    cout << "Loaded " << registers[rd] << " from Mem[" << (mem_address/4) << "]\n";
                 } else {
                     cerr << "Error: Memory access out of bounds or unaligned at " << mem_address << "\n";
                 }
@@ -230,7 +230,7 @@ public:
 
     void initializeMemory() {
         for (int i = 0; i < memory.size(); ++i) {
-            memory[i] = i * 2;
+            memory[i] = 0;
         }
     }
 
@@ -263,9 +263,20 @@ public:
                 iss >> type;
 
                 if (type == ".word") {
-                    int value;
-                    while (iss >> hex >> value) {  
-                        memory[memIndex++] = value;
+                    string numStr;
+                    while (iss >> numStr) {
+                        int value;
+                        
+                        // Check if number starts with "0x" for hexadecimal
+                        if (numStr.find("0x") == 0 || numStr.find("0X") == 0) {
+                            value = stoi(numStr, nullptr, 16);  // Convert from HEX
+                        } else {
+                            value = stoi(numStr, nullptr, 10);  // Convert from DECIMAL
+                        }
+    
+                        memory[memIndex] = value;
+                        cout << "Stored " << value << " at Mem[" << memIndex * 4 << "] "<< endl;
+                        memIndex++;
                     }
                 }
             }
@@ -335,7 +346,7 @@ public:
 int main() {
     vector<string> program;
 
-    ifstream file("program.s");
+    ifstream file("bubbleSort.s");
     if (!file.is_open()) {
         cerr << "Failed to open file: program.s" << endl;
         return 1;
