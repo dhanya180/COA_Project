@@ -4,6 +4,7 @@
 #include <sstream>
 #include <iomanip>
 #include <unordered_map>
+
 using namespace std;
 
 class Cores {
@@ -20,16 +21,21 @@ public:
         istringstream iss(pgm[pc]);
         string opcode;
         iss >> opcode;
-        if (opcode.back() == ':') {
+        if (opcode.empty() || opcode[0] == '#') {  // Ignore empty lines and comments
             pc++;
             return true;
         }
+
+        if (opcode.back() == ':') {  // Skip labels
+            pc++;
+            return true;
+        }
+
         cout << "Core " << coreid << " executing: " << pgm[pc] << " (PC = " << pc << ")\n";
 
         if (opcode == "ADD" || opcode == "add") {
             string rd_str, rs1_str, rs2_str;
             iss >> rd_str >> rs1_str >> rs2_str;
-            if (rd_str[0] != 'x' || rs1_str[0] != 'x' || rs2_str[0] != 'x') return false;
             int rd = stoi(rd_str.substr(1));
             int rs1 = stoi(rs1_str.substr(1));
             int rs2 = stoi(rs2_str.substr(1));
@@ -37,10 +43,19 @@ public:
             cout << "Updated X" << rd << " = " << registers[rd] << "\n";
         }
 
+        else if (opcode == "ADDI" || opcode == "addi") {
+            string rd_str, rs1_str;
+            int imm;
+            iss >> rd_str >> rs1_str >> imm;
+            int rd = stoi(rd_str.substr(1));
+            int rs1 = stoi(rs1_str.substr(1));
+            registers[rd] = registers[rs1] + imm;
+            cout << "Updated X" << rd << " = " << registers[rd] << "\n";
+        }
+
         else if (opcode == "SUB" || opcode == "sub") {
             string rd_str, rs1_str, rs2_str;
             iss >> rd_str >> rs1_str >> rs2_str;
-            if (rd_str[0] != 'x' || rs1_str[0] != 'x' || rs2_str[0] != 'x') return false;
             int rd = stoi(rd_str.substr(1));
             int rs1 = stoi(rs1_str.substr(1));
             int rs2 = stoi(rs2_str.substr(1));
@@ -62,10 +77,9 @@ public:
         else if (opcode == "BNE" || opcode == "bne") {
             string rs1_str, rs2_str, label;
             iss >> rs1_str >> rs2_str >> label;
-            if (labels.find(label) == labels.end()) return false;
             int rs1 = stoi(rs1_str.substr(1));
             int rs2 = stoi(rs2_str.substr(1));
-            if (registers[rs1] != registers[rs2]) {
+            if (registers[rs1] != registers[rs2] && labels.count(label)) {
                 cout << "BNE: X" << rs1 << " != X" << rs2 << ", Jumping to " << label << "\n";
                 pc = labels[label];
                 return true;
@@ -124,7 +138,7 @@ public:
             istringstream iss(program[i]);
             string first_word;
             iss >> first_word;
-            if (first_word.back() == ':') {
+            if (!first_word.empty() && first_word.back() == ':') {
                 labels[first_word.substr(0, first_word.size() - 1)] = i;
             }
         }
@@ -165,9 +179,16 @@ int main() {
         cerr << "Failed to open file: program.s" << endl;
         return 1;
     }
+
     string line;
     while (getline(file, line)) {
-        program.push_back(line);
+        size_t comment_pos = line.find('#');
+        if (comment_pos != string::npos) {
+            line = line.substr(0, comment_pos);  // Remove comment part
+        }
+        if (!line.empty()) {  // Skip empty lines
+            program.push_back(line);
+        }
     }
     file.close();
 
