@@ -346,7 +346,7 @@ public:
 int main() {
     vector<string> program;
 
-    ifstream file("bubbleSort.s");
+    ifstream file("program.s");
     if (!file.is_open()) {
         cerr << "Failed to open file: program.s" << endl;
         return 1;
