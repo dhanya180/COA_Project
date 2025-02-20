@@ -80,6 +80,7 @@ public:
             int rs1 = stoi(rs1_str.substr(1));
             int rs2 = stoi(rs2_str.substr(1));
             if (registers[rs1] == registers[rs2] && labels.count(label)) {
+                cout << "BEQ: X" << rs1 << " == X" << rs2 << ", Jumping to " << label << "\n";
                 pc = labels[label];
                 return true;
             }
@@ -91,6 +92,7 @@ public:
             int rs1 = stoi(rs1_str.substr(1));
             int rs2 = stoi(rs2_str.substr(1));
             if (registers[rs1] <= registers[rs2] && labels.count(label)) {
+                cout << "BLE: X" << rs1 << " <= X" << rs2 << ", Jumping to " << label << "\n";
                 pc = labels[label];
                 return true;
             }
@@ -100,10 +102,12 @@ public:
             string label;
             iss >> label;
             if (labels.count(label)) {
+                cout << "J: Unconditional jump to " << label << "\n";
                 pc = labels[label];
                 return true;
             }
         }
+        
 
         else if (opcode == "BNE" || opcode == "bne") {
             string rs1_str, rs2_str, label;
@@ -134,86 +138,16 @@ public:
             }
         }
         
-        
         else if (opcode == "LI" || opcode == "li") {
             string rd_str;
             int imm;
             iss >> rd_str >> imm;
             int rd = stoi(rd_str.substr(1));
             registers[rd] = imm;
+            cout << "LI: Loaded immediate " << imm << " into X" << rd << "\n";
         }
         
-        // else if (opcode == "LW" || opcode == "lw") {
-        //     string rd_str, offset_reg;
-        //     int offset;
-        //     iss >> rd_str >> offset >> offset_reg;
-        //     int rd = stoi(rd_str.substr(1));
-        //     int base = stoi(offset_reg.substr(1));
-        //     int mem_address = registers[base] + offset;
-        //     registers[rd] = mem[mem_address / 4];
-        //     cout << "Loaded " << registers[rd] << " from Mem[" << mem_address << "]\n";
-        // }
-        //  else if (opcode == "LW" || opcode == "lw") {
-        //     string rd_str, offset_reg;
-        //     int offset;
-            
-        //     // Read the next two parts
-        //     iss >> rd_str >> offset_reg;
-            
-        //     // Extract offset and register from "0(x3)" format
-        //     size_t open_bracket = offset_reg.find('(');
-        //     size_t close_bracket = offset_reg.find(')');
-        
-        //     if (open_bracket != string::npos && close_bracket != string::npos) {
-        //         // Extract offset and base register separately
-        //         string offset_str = offset_reg.substr(0, open_bracket); // Extract "0"
-        //         string base_str = offset_reg.substr(open_bracket + 1, close_bracket - open_bracket - 1); // Extract "x3"
-        
-        //         // Convert strings to integers safely
-        //         offset = stoi(offset_str);
-        //         int base = stoi(base_str.substr(1)); // Remove 'x' and convert
-                
-        //         int rd = stoi(rd_str.substr(1)); // Remove 'x' from rd
-                
-        //         // Perform memory access
-        //         int mem_address = registers[base] + offset;
-        //         registers[rd] = mem[mem_address / 4];  // Read from memory
-        //         cout << "Loaded " << registers[rd] << " from Mem[" << mem_address << "]\n";
-        //     } else {
-        //         cerr << "Error parsing LW instruction: " << pgm[pc] << endl;
-        //     }
-        // }
-        // else if (opcode == "LW" || opcode == "lw") {  // Load Word
-        //     string rd_str, offset_reg;
-        //     int offset;
-        //     iss >> rd_str >> offset >> offset_reg;
-        //     int rd = stoi(rd_str.substr(1));
-        //     int base = stoi(offset_reg.substr(1));
-        //     int mem_address = registers[base] + offset;
 
-        //     if (mem_address / 4 < mem.size()) {
-        //         registers[rd] = mem[mem_address / 4];
-        //         cout << "Loaded " << registers[rd] << " from Mem[" << mem_address << "]\n";
-        //     } else {
-        //         cerr << "Error: Memory access out of bounds at " << mem_address << "\n";
-        //     }
-        // }
-        
-
-        // else if (opcode == "SW" || opcode == "sw") {
-        //     string rs_str, offset_reg;
-        //     int offset;
-        //     iss >> rs_str >> offset >> offset_reg;
-        //     int rs = stoi(rs_str.substr(1));
-        //     int base = stoi(offset_reg.substr(1));
-        //     int mem_address = registers[base] + offset;
-        //     if (mem_address / 4 < mem.size()) {
-        //         mem[mem_address / 4] = registers[rs];
-        //         cout << "Stored " << registers[rs] << " to Mem[" << mem_address << "]\n";
-        //     } else {
-        //         cerr << "Error: Memory access out of bounds at " << mem_address << "\n";
-        //     }
-        // }
         else if (opcode == "SW" || opcode == "sw") {
             string rs_str, offset_reg;
             int offset;
@@ -273,7 +207,6 @@ public:
                 cerr << "Error parsing LW instruction: " << pgm[pc] << endl;
             }
         }
-    
 
         pc++;
         return true;
@@ -350,16 +283,6 @@ public:
         }
     }
 
-    // void run() {
-    //     storingLabels();
-    //     parseDataSection(program);
-    //     while (clock < program.size()) {
-    //         for (int i = 0; i < 4; ++i) {
-    //             cores[i].execute(program, memory, labels,data);
-    //         }
-    //         clock++;
-    //     }
-    // }
     void run() {
         storingLabels();
         parseDataSection(program);
@@ -412,7 +335,7 @@ public:
 int main() {
     vector<string> program;
 
-    ifstream file("bubbleSort.s");
+    ifstream file("program.s");
     if (!file.is_open()) {
         cerr << "Failed to open file: program.s" << endl;
         return 1;
