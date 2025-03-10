@@ -1,382 +1,55 @@
+#include "Simulator.hpp"
 #include <iostream>
 #include <fstream>
 #include <vector>
-#include <sstream>
-#include <iomanip>
-#include <unordered_map>
+#include <string>
 
 using namespace std;
 
-class Cores {
-public:
-    vector<int> registers;
-    int pc;
-    int coreid;
-
-    Cores(int cid) : registers(32, 0), pc(0), coreid(cid) {}
-
-    bool execute(const vector<string>& pgm, vector<int>& mem, unordered_map<string, int>& labels , unordered_map<string, int>& data) {
-        if (pc >= pgm.size()) return false;
-
-        istringstream iss(pgm[pc]);
-        string opcode;
-        iss >> opcode;
-        if (opcode.empty() || opcode[0] == '#') {  // Ignore empty lines and comments
-            pc++;
-            return true;
-        }
-
-        if (opcode.back() == ':') {  // Skip labels
-            pc++;
-            return true;
-        }
-
-        cout << "Core " << coreid << " executing: " << pgm[pc] << " (PC = " << pc << ")\n";
-
-        if (opcode == "ADD" || opcode == "add") {
-            string rd_str, rs1_str, rs2_str;
-            iss >> rd_str >> rs1_str >> rs2_str;
-            int rd = stoi(rd_str.substr(1));
-            int rs1 = stoi(rs1_str.substr(1));
-            int rs2 = stoi(rs2_str.substr(1));
-            registers[rd] = registers[rs1] + registers[rs2];
-            cout << "Updated X" << rd << " = " << registers[rd] << "\n";
-        }
-
-        else if (opcode == "ADDI" || opcode == "addi") {
-            string rd_str, rs1_str;
-            int imm;
-            iss >> rd_str >> rs1_str >> imm;
-            int rd = stoi(rd_str.substr(1));
-            int rs1 = stoi(rs1_str.substr(1));
-            registers[rd] = registers[rs1] + imm;
-            cout << "Updated X" << rd << " = " << registers[rd] << "\n";
-        }
-
-        else if (opcode == "SUB" || opcode == "sub") {
-            string rd_str, rs1_str, rs2_str;
-            iss >> rd_str >> rs1_str >> rs2_str;
-            int rd = stoi(rd_str.substr(1));
-            int rs1 = stoi(rs1_str.substr(1));
-            int rs2 = stoi(rs2_str.substr(1));
-            registers[rd] = registers[rs1] - registers[rs2];
-            cout << "Updated X" << rd << " = " << registers[rd] << "\n";
-        }
-
-        else if (opcode == "JAL" || opcode == "jal") {
-            string rd_str, label;
-            iss >> rd_str >> label;
-            if (labels.count(label)) {
-                cout << "JAL: Jumping to " << label << "\n";
-                registers[31] = pc + 1;
-                pc = labels[label];
-                return true;
-            }
-        }
-
-        else if (opcode == "BEQ" || opcode == "beq") {
-            string rs1_str, rs2_str, label;
-            iss >> rs1_str >> rs2_str >> label;
-            int rs1 = stoi(rs1_str.substr(1));
-            int rs2 = stoi(rs2_str.substr(1));
-            if (registers[rs1] == registers[rs2] && labels.count(label)) {
-                cout << "BEQ: X" << rs1 << " == X" << rs2 << ", Jumping to " << label << "\n";
-                pc = labels[label];
-                return true;
-            }
-        }
-        
-        else if (opcode == "BLE" || opcode == "ble") {
-            string rs1_str, rs2_str, label;
-            iss >> rs1_str >> rs2_str >> label;
-            int rs1 = stoi(rs1_str.substr(1));
-            int rs2 = stoi(rs2_str.substr(1));
-            if (registers[rs1] <= registers[rs2] && labels.count(label)) {
-                cout << "BLE: X" << rs1 << " <= X" << rs2 << ", Jumping to " << label << "\n";
-                pc = labels[label];
-                return true;
-            }
-        }
-        
-        else if (opcode == "J" || opcode == "j") {
-            string label;
-            iss >> label;
-            if (labels.count(label)) {
-                cout << "J: Unconditional jump to " << label << "\n";
-                pc = labels[label];
-                return true;
-            }
-        }
-        
-
-        else if (opcode == "BNE" || opcode == "bne") {
-            string rs1_str, rs2_str, label;
-            iss >> rs1_str >> rs2_str >> label;
-            int rs1 = stoi(rs1_str.substr(1));
-            int rs2 = stoi(rs2_str.substr(1));
-            if (registers[rs1] != registers[rs2] && labels.count(label)) {
-                cout << "BNE: X" << rs1 << " != X" << rs2 << ", Jumping to " << label << "\n";
-                pc = labels[label];
-                return true;
-            }
-        }
-
-        else if (opcode == "ECALL" || opcode == "ecall") {
-            cout << "System call executed\n";
-        }
-        
-        else if (opcode == "LA" || opcode == "la") {
-            string rd_str, label;
-            iss >> rd_str >> label;
-            int rd = stoi(rd_str.substr(1));
-        
-            if (data.find(label) != data.end()) {
-                registers[rd] = data[label];  
-                cout << "Loaded Address " << label << " -> X" << rd << " = " << registers[rd] << "\n";
-            } else {
-                cerr << "Error: Label " << label << " not found in .data\n";
-            }
-        }
-        
-        else if (opcode == "LI" || opcode == "li") {
-            string rd_str;
-            int imm;
-            iss >> rd_str >> imm;
-            int rd = stoi(rd_str.substr(1));
-            registers[rd] = imm;
-            cout << "LI: Loaded immediate " << imm << " into X" << rd << "\n";
-        }
-        
-
-        else if (opcode == "SW" || opcode == "sw") {
-            string rs_str, offset_reg;
-            int offset;
-            iss >> rs_str >> offset_reg;
-    
-            size_t open_bracket = offset_reg.find('(');
-            size_t close_bracket = offset_reg.find(')');
-    
-            if (open_bracket != string::npos && close_bracket != string::npos) {
-                string offset_str = offset_reg.substr(0, open_bracket);
-                string base_str = offset_reg.substr(open_bracket + 1, close_bracket - open_bracket - 1);
-    
-                offset = stoi(offset_str);
-                int base = stoi(base_str.substr(1));
-                int rs = stoi(rs_str.substr(1));
-    
-                int mem_address = registers[base] + offset;
-    
-                if ((mem_address >= 0) && (mem_address < mem.size() * 4) && (mem_address % 4 == 0)) { 
-                    mem[mem_address / 4] = registers[rs];
-                    cout << "Stored " << registers[rs] << " to Mem[" << mem_address << "]\n";
-                } else {
-                    cerr << "Error: Memory access out of bounds or unaligned at " << mem_address << "\n";
-                }
-            } else {
-                cerr << "Error parsing SW instruction: " << pgm[pc] << endl;
-            }
-        }
-    
-        else if (opcode == "LW" || opcode == "lw") {
-            string rd_str, offset_reg;
-            int offset;
-    
-            iss >> rd_str >> offset_reg;
-
-            size_t open_bracket = offset_reg.find('(');
-            size_t close_bracket = offset_reg.find(')');
-    
-            if (open_bracket != string::npos && close_bracket != string::npos) {
-                string offset_str = offset_reg.substr(0, open_bracket); 
-                string base_str = offset_reg.substr(open_bracket + 1, close_bracket - open_bracket - 1); 
-    
-               
-                offset = stoi(offset_str);
-                int base = stoi(base_str.substr(1)); 
-    
-                int rd = stoi(rd_str.substr(1)); 
-                 int mem_address = registers[base] + offset;
-    
-                if ((mem_address >= 0) && (mem_address < mem.size() * 4) && (mem_address % 4 == 0)) { 
-                    registers[rd] = mem[mem_address / 4];
-                    cout << "Loaded " << registers[rd] << " from Mem[" << (mem_address/4) << "]\n";
-                } else {
-                    cerr << "Error: Memory access out of bounds or unaligned at " << mem_address << "\n";
-                }
-            } else {
-                cerr << "Error parsing LW instruction: " << pgm[pc] << endl;
-            }
-        }
-
-        pc++;
-        return true;
-    }
-};
-
-class Simulator {
-public:
-    vector<int> memory;
-    int clock;
-    vector<Cores> cores;
-    vector<string> program;
-    unordered_map<string, int> labels;
-    unordered_map<string, int> data;
-
-    Simulator() : memory(1024, 0), clock(0), cores(4, Cores(0)) {
-        for (int i = 0; i < 4; ++i) {
-            cores[i] = Cores(i);
-        }
-    }
-
-    void initializeMemory() {
-        for (int i = 0; i < memory.size(); ++i) {
-            memory[i] = 0;
-        }
-    }
-
-    
-    
-    void parseDataSection(const vector<string>& pgm) {
-        int memIndex = 0;
-        bool inDataSection = false;
-        
-        for (const string& line : pgm) {
-            istringstream iss(line);
-            string first_word;
-            iss >> first_word;
-
-            if (first_word == ".data") {
-                inDataSection = true;
-                continue;
-            }
-
-            if (first_word == ".text") {
-                inDataSection = false;
-                continue;
-            }
-
-            if (inDataSection && first_word.back() == ':') { 
-                string label = first_word.substr(0, first_word.size() - 1);
-                data[label] = memIndex * 4; 
-
-                string type;
-                iss >> type;
-
-                if (type == ".word") {
-                    string numStr;
-                    while (iss >> numStr) {
-                        int value;
-                        
-                        // Check if number starts with "0x" for hexadecimal
-                        if (numStr.find("0x") == 0 || numStr.find("0X") == 0) {
-                            value = stoi(numStr, nullptr, 16);  // Convert from HEX
-                        } else {
-                            value = stoi(numStr, nullptr, 10);  // Convert from DECIMAL
-                        }
-    
-                        memory[memIndex] = value;
-                        cout << "Stored " << value << " at Mem[" << memIndex * 4 << "] "<< endl;
-                        memIndex++;
-                    }
-                }
-            }
-        }
-    }
-
-    void storingLabels() {
-        for (int i = 0; i < program.size(); ++i) {
-            istringstream iss(program[i]);
-            string first_word;
-            iss >> first_word;
-            if (!first_word.empty() && first_word.back() == ':') {
-                labels[first_word.substr(0, first_word.size() - 1)] = i;
-            }
-        }
-    }
-
-    void run() {
-        storingLabels();
-        parseDataSection(program);
-    
-        vector<bool> core_active(cores.size(), true); 
-    
-        while (true) {
-            bool all_cores_idle = true; 
-    
-            for (int i = 0; i < cores.size(); ++i) {
-                if (core_active[i]) {
-                    all_cores_idle = false; 
-    
-                    if (cores[i].pc < program.size()) { 
-                        core_active[i] = cores[i].execute(program, memory, labels, data);
-                    } else {
-                        core_active[i] = false; 
-                    }
-                }
-            }
-    
-            if (all_cores_idle) {
-                break; 
-            }
-    
-            clock++; 
-        }
-    
-        cout << "Simulation finished after " << clock << " clock cycles." << endl;
-    }
-    
-
-    void display() {
-        for (int i = 0; i < 4; ++i) {
-            cout << "Core " << i << " Registers: ";
-            for (int j = 0; j < 32; ++j) {
-                cout << setw(3) << cores[i].registers[j] << " ";
-            }
-            cout << endl;
-        }
-        cout << "Memory: ";
-        for (int i = 0; i < 16; ++i) {
-            cout << setw(3) << memory[i] << " ";
-        }
-        cout << "\n";
-        cout << "Number of clock cycles: " << clock << endl;
-    }
-};
-
 int main() {
     vector<string> program;
-
     ifstream file("program.s");
-    if (!file.is_open()) {
-        cerr << "Failed to open file: program.s" << endl;
+    if (!file.is_open()){
+        cerr << "Error opening file\n";
         return 1;
     }
-
     string line;
-    while (getline(file, line)) {
-        size_t comment_pos = line.find('#');
-        if (comment_pos != string::npos) {
-            line = line.substr(0, comment_pos);  //Remove comment part
-        }
-        if (!line.empty()) {  // Skip empty lines
-            program.push_back(line);
-        }
-    }
-    file.close();
+    while (getline(file, line))
+        program.push_back(line);
 
     Simulator sim;
     sim.program = program;
-    sim.parseDataSection(program);
     sim.initializeMemory();
 
-    for (int i = 0; i < 4; i++) {
+    // Initialize registers for each core.
+    for (int i = 0; i < 4; ++i) {
         sim.cores[i].registers[1] = 1;
         sim.cores[i].registers[2] = 2;
         sim.cores[i].registers[3] = 3;
+        sim.cores[i].registers[4] = 4;
+        sim.cores[i].registers[5] = 5;
+        sim.cores[i].registers[6] = 6;
     }
 
-    sim.run();
-    sim.display();
+    int choice;
+    cout << "Enable forwarding? (Enter 1 for Yes, 0 for No): ";
+    cin >> choice;
+    sim.forwardingEnabled = (choice == 1);
 
+    // If forwarding is disabled, ask the user for latencies for arithmetic instructions.
+    cout << "Enter latency (in cycles) for ADD: ";
+    int lat;
+    cin >> lat;
+    sim.latencies["ADD"] = lat;
+    cout << "Enter latency for SUB: ";
+    cin >> lat;
+    sim.latencies["SUB"] = lat;
+    cout << "Enter latency for ADDI: ";
+    cin >> lat;
+    sim.latencies["ADDI"] = lat;
+
+    sim.run();
+    cout << "\nProgram size: " << program.size() << "\n";
+    sim.display();
     return 0;
 }
