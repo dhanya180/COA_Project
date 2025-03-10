@@ -106,7 +106,7 @@ int Cores::execute(const PipelineInstruction &pInstr, vector<int>& mem,
             // Compute memory address
             registers[base] = mem[0];
             offset/=4;
-            int mem_address = registers[base] + offset;
+            int mem_address = registers[base + offset];
     
             // Debugging prints
             cout << "Base Reg: x" << base << " = " << registers[base] 
@@ -146,7 +146,7 @@ int Cores::execute(const PipelineInstruction &pInstr, vector<int>& mem,
     
             registers[base] = mem[0];
             offset/=4;
-            int mem_address = registers[base] + offset;
+            int mem_address = registers[base  + offset];
     
             if ((mem_address >= 0) && (mem_address < mem.size() * 4) ) {
                 registers[rd] = mem[mem_address];
