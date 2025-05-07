@@ -1,9 +1,10 @@
-#ifndef PIPELINE_INSTRUCTION_H
-#define PIPELINE_INSTRUCTION_H
+#ifndef PIPELINE_INSTRUCTION_HPP
+#define PIPELINE_INSTRUCTION_HPP
 
 #include <string>
 #include <vector>
 
+// Pipeline instruction structure.
 struct PipelineInstruction {
     int coreId;
     int pc;
@@ -11,7 +12,7 @@ struct PipelineInstruction {
     std::string opcode;
     std::vector<std::string> operands;
     bool valid = false;
-    bool stalled = false; // Indicates if the instruction is stalled.
+    bool stalled = false; // indicates if the instruction is stalled
     int imm = 0;
 
     // For hazard detection.
@@ -23,7 +24,15 @@ struct PipelineInstruction {
     int op1 = 0;
     int op2 = 0;
     int aluResult = 0;
-    int execCyclesRemaining = 0;  // Number of execute cycles remaining.
+    int execCyclesRemaining = 0;  // number of execute cycles remaining
+    
+    // Flag to indicate if this is a memory instruction (for forwarding)
+    bool isMemoryInstruction = false;
+    bool isLoadInstruction = false;  // Specific flag for load instructions
+    
+    // Control flow flags
+    bool isControlInstruction = false;
+    bool branchTaken = false;
 };
 
-#endif // PIPELINE_INSTRUCTION_H
+#endif // PIPELINE_INSTRUCTION_HPP

@@ -1,38 +1,38 @@
-#ifndef CORES_H
-#define CORES_H
+#ifndef CORES_HPP
+#define CORES_HPP
 
-#include "PipelineInstruction.hpp"
 #include <vector>
 #include <string>
 #include <unordered_map>
+#include "PipelineInstruction.hpp"
 
 class Cores {
 public:
     std::vector<int> registers;
     int coreid;
     int pc;
+    PipelineInstruction IF, ID, EX, MEM, WB;
+    bool flushRequired = false;
+    int newPC = 0;
+    bool skipExecution = false;
 
     Cores(int cid);
-
-    // Converts an operand (e.g., "x5" or "cid") to a register number.
+    
     int operandToReg(const std::string &op);
 
-    // Execute the instruction in the execute stage.
-    int execute(const PipelineInstruction &pInstr, std::vector<int>& mem,
-                std::unordered_map<std::string, int>& labels,
-                std::unordered_map<std::string, int>& data);
+    // Execute stage: when execCyclesRemaining==1, perform the operation.
+    int execute(PipelineInstruction &pInstr, std::vector<int>& mem,
+        std::unordered_map<std::string, int>& labels,
+        std::unordered_map<std::string, int>& data);
 
-    // Decode the instruction and fill in register numbers.
+    // Decode stage: parse the instruction to extract register numbers.
     PipelineInstruction decode(const PipelineInstruction &pInstr);
 
-    // Memory stage.
     PipelineInstruction memory(const PipelineInstruction &pInstr, std::vector<int>& mem);
 
-    // Writeback stage.
     PipelineInstruction writeback(const PipelineInstruction &pInstr);
 
-    // Fetch stage.
     PipelineInstruction fetch(int pc, std::vector<std::string>& program);
 };
 
-#endif // CORES_H
+#endif // CORES_HPP

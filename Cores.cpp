@@ -2,8 +2,6 @@
 #include <iostream>
 #include <sstream>
 #include <algorithm>
-#include <iomanip>
-#include <cctype>
 
 using namespace std;
 
@@ -14,210 +12,334 @@ Cores::Cores(int cid) : registers(32, 0), coreid(cid), pc(0) {
 int Cores::operandToReg(const string &op) {
     string tmp = op;
     transform(tmp.begin(), tmp.end(), tmp.begin(), ::tolower);
-    if (tmp == "cid")
+    if(tmp == "cid") {
         return 31;
-    else // Assuming operand starts with 'x'
+    } else if(tmp[0] == 'x') {
+        // Operand starts with 'x'
         return stoi(op.substr(1));
+    } else {
+        // Try to parse as a direct number
+        try {
+            return stoi(op);
+        } catch(...) {
+            cerr << "Invalid register operand: " << op << endl;
+            return -1;
+        }
+    }
 }
 
-int Cores::execute(const PipelineInstruction &pInstr, vector<int>& mem,
-                   unordered_map<string, int>& labels,
-                   unordered_map<string, int>& data) {
+// Execute stage: when execCyclesRemaining==1, perform the operation.
+int Cores::execute(PipelineInstruction &pInstr, vector<int>& mem,
+    unordered_map<string, int>& labels,
+    unordered_map<string, int>& data) {
+    
     if (!pInstr.valid || pInstr.stalled)
         return 0;
 
     string opcode = pInstr.opcode;
+    transform(opcode.begin(), opcode.end(), opcode.begin(), ::toupper);
+    
     cout << "Core " << coreid << " executing: " << pInstr.instruction
-         << " (PC = " << pInstr.pc << ")\n";
+        << " (PC = " << pInstr.pc << ")\n";
 
     int result = 0;
-    if (opcode == "ADD" || opcode == "add") {
-        result = registers[pInstr.rs1] + registers[pInstr.rs2];
+    bool branchTaken = false;
+
+    if (opcode == "ADD") {
+        result = pInstr.op1 + pInstr.op2;
+        if (pInstr.rd != 0){
         registers[pInstr.rd] = result;
         cout << "Updated X" << pInstr.rd << " = " << result << "\n";
+        }
+
     }
-    else if (opcode == "ADDI" || opcode == "addi") {
-        result = registers[pInstr.rs1] + pInstr.imm;
+    else if (opcode == "ADDI") {
+        result = pInstr.op1 + pInstr.imm;
+        if (pInstr.rd != 0){
         registers[pInstr.rd] = result;
         cout << "Updated X" << pInstr.rd << " = " << result << "\n";
+        }
     }
-    else if (opcode == "SUB" || opcode == "sub") {
-        result = registers[pInstr.rs1] - registers[pInstr.rs2];
+    else if (opcode == "SUB") {
+        result = pInstr.op1 - pInstr.op2;
+        if (pInstr.rd != 0){
         registers[pInstr.rd] = result;
         cout << "Updated X" << pInstr.rd << " = " << result << "\n";
+        }
     }
-    else if (opcode == "JAL" || opcode == "jal") {
-        registers[31] = pInstr.pc + 1;
+    else if (opcode == "MUL") {
+        result = pInstr.op1 * pInstr.op2;
+        if (pInstr.rd != 0){
+            registers[pInstr.rd] = result;
+            cout << "Updated X" << pInstr.rd << " = " << result << "\n";
+        }
+    }
+    else if (opcode == "JAL") {
+        registers[pInstr.rd] = pInstr.pc + 1;
         if (labels.count(pInstr.operands[1])) {
-            cout << "JAL: Jumping to " << pInstr.operands[1] << "\n";
-            pc = labels[pInstr.operands[1]];
-            return 1;
+            newPC = labels[pInstr.operands[1]];
+            branchTaken = true;
+            pInstr.branchTaken = true;
+            cout << "JAL to " << pInstr.operands[1] << " at PC = " << newPC << "\n";
+        } else {
+            cerr << "ERROR: JAL label not found: " << pInstr.operands[1] << endl;
         }
     }
-    else if (opcode == "J" || opcode == "j") {
+    else if (opcode == "J") {
         if (labels.count(pInstr.operands[0])) {
-            cout << "J: Unconditional jump to " << pInstr.operands[0] << "\n";
-            pc = labels[pInstr.operands[0]];
-            return 1;
+            newPC = labels[pInstr.operands[0]];
+            branchTaken = true;
+            pInstr.branchTaken = true;
+            cout << "Jump to " << pInstr.operands[0] << " at PC = " << newPC << "\n";
+        } else {
+            cerr << "ERROR: Jump label not found: " << pInstr.operands[0] << endl;
         }
     }
-    else if (opcode == "BEQ" || opcode == "beq") {
-        if (registers[pInstr.rs1] == registers[pInstr.rs2] && labels.count(pInstr.operands[2])) {
-            cout << "BEQ: Jumping to " << pInstr.operands[2] << "\n";
-            pc = labels[pInstr.operands[2]];
-            return 1;
-        }
-    }
-    else if (opcode == "BLE" || opcode == "ble") {
-        if (registers[pInstr.rs1] <= registers[pInstr.rs2] && labels.count(pInstr.operands[2])) {
-            cout << "BLE: Jumping to " << pInstr.operands[2] << "\n";
-            pc = labels[pInstr.operands[2]];
-            return 1;
-        }
-    }
-    else if (opcode == "BNE" || opcode == "bne") {
-        string label = pInstr.operands[2];
-        cout << label << "\n";
-        if (registers[pInstr.rs1] != registers[pInstr.rs2] && labels.count(pInstr.operands[2])) {
-            cout << "BNE: Jumping to " << pInstr.operands[2] << "\n";
-            pc = labels[label];
-            return 1;
-        }
-    }
-    else if (opcode == "SW" || opcode == "sw") {
-        int rs = stoi(pInstr.operands[0].substr(1));  // Source register (e.g., x6)
-        string offset_reg = pInstr.operands[1];       // Memory operand (e.g., "0(x5)")
-        int offset;
-    
-        size_t open_bracket = offset_reg.find('(');
-        size_t close_bracket = offset_reg.find(')');
-    
-        if (open_bracket != string::npos && close_bracket != string::npos) {
-            // Extract offset and base register
-            string offset_str = offset_reg.substr(0, open_bracket);
-            string base_str = offset_reg.substr(open_bracket + 1, close_bracket - open_bracket - 1);
-    
-            // Handle empty offset cases (assume 0 if empty)
-            offset = (offset_str.empty()) ? 0 : stoi(offset_str);
-    
-            // Extract base register index
-            int base = stoi(base_str.substr(1));
-    
-            // Compute memory address
-            registers[base] = mem[0];
-            offset/=4;
-            int mem_address = registers[base + offset];
-    
-            // Debugging prints
-            cout << "Base Reg: x" << base << " = " << registers[base] 
-                 << ", Offset: " << offset 
-                 << ", Mem Addr: " << mem_address << "\n";
-    
-            // Ensure memory address is aligned to 4 bytes
-            if ((mem_address >= 0) && (mem_address < mem.size() * 4) ) {
-                mem[mem_address] = registers[rs];  // Store value into memory
-                cout << "Stored " << registers[rs] << " to Mem[" << (mem_address / 4) << "]\n";
+    else if (opcode == "BEQ") {
+        cout << "BEQ comparing " << pInstr.op1 << " and " << pInstr.op2 << endl;
+        if (pInstr.op1 == pInstr.op2) {
+            if (labels.count(pInstr.operands[2])) {
+                newPC = labels[pInstr.operands[2]];
+                branchTaken = true;
+                pInstr.branchTaken = true;
+                cout << "BEQ branch taken to " << pInstr.operands[2] << " at PC = " << newPC << "\n";
             } else {
-                cerr << "Error: Memory access unaligned at " << mem_address << "\n";
+                cerr << "ERROR: BEQ label not found: " << pInstr.operands[2] << endl;
             }
         } else {
-            cerr << "Error parsing SW instruction: " << pInstr.instruction << endl;
+            cout << "BEQ branch not taken\n";
         }
     }
-    
-    
-    else if (opcode == "LW" || opcode == "lw") {
-        int rd = stoi(pInstr.operands[0].substr(1));
-        string offset_reg = pInstr.operands[1];
-        int offset;
-    
-        size_t open_bracket = offset_reg.find('(');
-        size_t close_bracket = offset_reg.find(')');
-    
-        if (open_bracket != string::npos && close_bracket != string::npos) {
-            string offset_str = offset_reg.substr(0, open_bracket);
-            string base_str = offset_reg.substr(open_bracket + 1, close_bracket - open_bracket - 1);
-    
-            offset = stoi(offset_str);
-            int base = stoi(base_str.substr(1));
-    
-            cout << "Base Reg: x" << base << " = " << registers[base] 
-                 << ", Offset: " << offset << "\n";
-    
-            registers[base] = mem[0];
-            offset/=4;
-            int mem_address = registers[base  + offset];
-    
-            if ((mem_address >= 0) && (mem_address < mem.size() * 4) ) {
-                registers[rd] = mem[mem_address];
-                cout << "Loaded " << registers[rd] << " from Mem[" << (mem_address / 4) << "]\n";
+    else if (opcode == "BLE") {
+        cout << "BLE comparing " << pInstr.op1 << " <= " << pInstr.op2 << endl;
+        if (pInstr.op1 <= pInstr.op2) {
+            if (labels.count(pInstr.operands[2])) {
+                newPC = labels[pInstr.operands[2]];
+                branchTaken = true;
+                pInstr.branchTaken = true;
+                cout << "BLE branch taken to " << pInstr.operands[2] << " at PC = " << newPC << "\n";
             } else {
-                cerr << "Error: Memory access out of bounds or unaligned at " << mem_address << "\n";
+                cerr << "ERROR: BLE label not found: " << pInstr.operands[2] << endl;
             }
         } else {
-            cerr << "Error parsing LW instruction: " << pInstr.instruction << endl;
+            cout << "BLE branch not taken\n";
         }
     }
-    else if (opcode == "LA" || opcode == "la") {
+    else if (opcode == "BNE") {
+        cout << "BNE comparing " << pInstr.op1 << " != " << pInstr.op2 << endl;
+        // Check if this is a CID-based branch
+        bool isCIDBranch = false;
+        if (pInstr.rs1 == 31 || pInstr.operands[0] == "cid") {
+            isCIDBranch = true;
+            cout << "This is a CID-based branch instruction" << endl;
+        }
+        
+        if (pInstr.op1 != pInstr.op2) {
+            // Branch condition is true
+            if (labels.count(pInstr.operands[2])) {
+                newPC = labels[pInstr.operands[2]];
+                branchTaken = true;
+                pInstr.branchTaken = true;
+                cout << "Core " << coreid << " - BNE branch taken to " << pInstr.operands[2] << " at PC = " << newPC << "\n";
+            } else {
+                cerr << "ERROR: BNE label not found: " << pInstr.operands[2] << endl;
+            }
+        } else {
+            // Branch condition is false
+            cout << "Core " << coreid << " - BNE branch not taken\n";
+            
+            // Special handling for CID-based branches when condition is false
+            if (isCIDBranch) {
+                // This core should continue execution without branching
+                // But we need to mark it to skip until the branch target
+                skipExecution = true;
+                cout << "Core " << coreid << " will skip instructions until branch target\n";
+            }
+        }
+    }
+    else if (opcode == "SW") {
+        // Step 1: Base register is logically mapped to mem[0]
+        int base_mem_index = 0;
+
+        // Step 2: Calculate offset in words
+        int mem_index = base_mem_index + (pInstr.imm / 4);
+
+        // Debugging Output
+        cout << "Base register (x" << pInstr.rs1 << ") mapped to mem[0]" << endl;
+        cout << "imm: " << pInstr.imm << ", Target Mem Index: " << mem_index << endl;
+
+        // Step 3: Check bounds and store
+        if (mem_index >= 0 && mem_index < mem.size()) {
+            mem[mem_index] = pInstr.op2;
+            cout << "Stored " << pInstr.op2
+                << " from x" << pInstr.rs2
+                << " to mem[" << mem_index << "]\n";
+        } else {
+            cerr << "Error: Memory access out of bounds at mem[" << mem_index << "]\n";
+        }
+    }
+    else if (opcode == "LW") {
+        // Step 1: Base register is logically mapped to mem[0]
+        int base_mem_index = 0;
+
+        // Step 2: Calculate offset in words
+        int mem_index = base_mem_index + (pInstr.imm / 4);
+
+        // Debugging Output
+        cout << "Base register (x" << pInstr.rs1 << ") mapped to mem[0]" << endl;
+        cout << "imm: " << pInstr.imm << ", Target Mem Index: " << mem_index << endl;
+
+        // Step 3: Check bounds and store
+        if (mem_index >= 0 && mem_index < mem.size()) {
+            result = mem[mem_index];
+            registers[pInstr.rd] = result;
+            cout << "Loaded " << result
+                << " to x" << pInstr.rd
+                << " from mem[" << mem_index << "]\n";
+        } else {
+            cerr << "Error: Memory access out of bounds at mem[" << mem_index << "]\n";
+        }
+    }
+    else if (opcode == "LA") {
         if (data.count(pInstr.operands[1])) {
-            registers[pInstr.rd] = data[pInstr.operands[1]];
-            cout << "Loaded address " << pInstr.operands[1] << " -> X" << pInstr.rd
-                 << " = " << registers[pInstr.rd] << "\n";
+            result = data[pInstr.operands[1]];
+            if (pInstr.rd != 0){
+            registers[pInstr.rd] = result;
+            cout << "Loaded address " << pInstr.operands[1] << " -> X" << pInstr.rd << " = " << result << "\n";
+            }
+        } else {
+            cerr << "ERROR: Data label not found: " << pInstr.operands[1] << endl;
         }
     }
-    else if (opcode == "LI" || opcode == "li") {
-        registers[pInstr.rd] = stoi(pInstr.operands[1]);
-        cout << "LI: Loaded immediate " << registers[pInstr.rd] << " into X" << pInstr.rd << "\n";
+    else if (opcode == "LI") {
+        result = stoi(pInstr.operands[1]);
+        if (pInstr.rd != 0){
+        registers[pInstr.rd] = result;
+        cout << "LI: Loaded immediate " << result << " into X" << pInstr.rd << "\n";
+        }
     }
-    else if (opcode == "ECALL" || opcode == "ecall") {
+    else if (opcode == "ECALL") {
         cout << "System call executed\n";
     }
-
-    return result;
+    
+    pInstr.aluResult = result;
+    return branchTaken ? 1 : 0;
 }
 
+// Decode stage: parse the instruction to extract register numbers.
 PipelineInstruction Cores::decode(const PipelineInstruction &pInstr) {
     PipelineInstruction decoded = pInstr;
     cout << "Core " << coreid << " decoding: " << decoded.instruction
-         << " (PC = " << decoded.pc << ")\n";
+        << " (PC = " << decoded.pc << ")\n";
 
-    if (decoded.opcode == "ADD" || decoded.opcode == "add" ||
-        decoded.opcode == "SUB" || decoded.opcode == "sub" ||
-        decoded.opcode == "ADDI" || decoded.opcode == "addi" ||
-        decoded.opcode == "LI" || decoded.opcode == "li" ||
-        decoded.opcode == "LW" || decoded.opcode == "lw" ||
-        decoded.opcode == "JAL" || decoded.opcode == "jal" ||
-        decoded.opcode == "LA" || decoded.opcode == "la") {
-        decoded.rd = stoi(decoded.operands[0].substr(1));
-    }
-
-    if (decoded.opcode == "ADD" || decoded.opcode == "add" ||
-        decoded.opcode == "SUB" || decoded.opcode == "sub") {
-        decoded.rs1 = stoi(decoded.operands[1].substr(1));
-        decoded.rs2 = stoi(decoded.operands[2].substr(1));
-    }
-    if (decoded.opcode == "BEQ" || decoded.opcode == "beq" ||
-        decoded.opcode == "BLE" || decoded.opcode == "ble" ||
-        decoded.opcode == "BNE" || decoded.opcode == "bne") {
-        decoded.rs1 = operandToReg(decoded.operands[0]);
-        decoded.rs2 = stoi(decoded.operands[1].substr(1));
-    }
-
-    if (decoded.opcode == "ADDI" || decoded.opcode == "addi") {
-        decoded.rs1 = stoi(decoded.operands[1].substr(1));
-    }
-    if (decoded.opcode == "ADDI" || decoded.opcode == "addi") {
-        decoded.imm = stoi(pInstr.operands[2]);
+    // Normalize opcode to uppercase for case-insensitive comparison
+    string op = decoded.opcode;
+    transform(op.begin(), op.end(), op.begin(), ::toupper);
+    decoded.opcode = op;
+    
+    // List of valid opcodes
+    vector<string> validOpcodes = {
+        "ADD", "SUB", "ADDI", "MUL", "LI",
+        "LW", "SW", "JAL", "LA", "J",
+        "BEQ", "BLE", "BNE",
+        "NOP", "ECALL"
+    };
+    
+    if (find(validOpcodes.begin(), validOpcodes.end(), op) == validOpcodes.end()) {
+        cerr << "Invalid instruction: " << decoded.instruction << " (Opcode: " << op << ")\n";
+        exit(1);
     }
     
+    if (op == "NOP") {
+        decoded.rd = -1;
+        decoded.rs1 = -1;
+        decoded.rs2 = -1;
+        decoded.op1 = 0;
+        decoded.op2 = 0;
+        return decoded;
+    }
+    
+    // Flag for control instructions
+    decoded.isControlInstruction = (op == "JAL" || op == "J" || op == "BEQ" || op == "BLE" || op == "BNE");
+    
+    // Process instructions with destination register
+    if (op == "ADD" || op == "SUB" || op == "ADDI" || op == "LI" || op == "JAL" || op == "LA" || op == "LW") {
+        if (!decoded.operands.empty()) {
+            decoded.rd = operandToReg(decoded.operands[0]);
+        }
+    }
+    
+    // Process R-type instructions (two source registers)
+    if (op == "ADD" || op == "SUB" || op == "MUL") {
+        if (decoded.operands.size() >= 3) {
+            decoded.rs1 = operandToReg(decoded.operands[1]);
+            decoded.rs2 = operandToReg(decoded.operands[2]);
+        }
+    }
+    
+    // Process branch instructions
+    if (op == "BEQ" || op == "BLE" || op == "BNE") {
+        if (decoded.operands.size() >= 3) {
+            decoded.rs1 = operandToReg(decoded.operands[0]);
+            decoded.rs2 = operandToReg(decoded.operands[1]);
+        }
+    }
+    
+    // Process I-type instructions (one source register + immediate)
+    if (op == "ADDI") {
+        if (decoded.operands.size() >= 3) {
+            decoded.rs1 = operandToReg(decoded.operands[1]);
+            decoded.imm = stoi(decoded.operands[2]);
+        }
+    }
+    
+    // Process memory instructions
+    if (op == "LW" || op == "SW") {
+        // Flag memory instructions
+        decoded.isMemoryInstruction = true;
+        
+        // Flag load instructions separately
+        if (op == "LW") {
+            decoded.isLoadInstruction = true;
+            decoded.rd = operandToReg(decoded.operands[0]);
+        } else if (op == "SW") {
+            decoded.rd = -1;  // No destination register for SW
+            decoded.rs2 = operandToReg(decoded.operands[0]);
+        }
+
+        // Parse memory operand format: offset(base)
+        if (decoded.operands.size() >= 2) {
+            size_t open_bracket = decoded.operands[1].find('(');
+            size_t close_bracket = decoded.operands[1].find(')');
+            
+            if (open_bracket != string::npos && close_bracket != string::npos) {
+                string imm_str = decoded.operands[1].substr(0, open_bracket);
+                string reg_str = decoded.operands[1].substr(open_bracket + 1, close_bracket - open_bracket - 1);
+                
+                try {
+                    decoded.imm = stoi(imm_str);
+                    decoded.rs1 = operandToReg(reg_str);
+                    
+                    cout << "Decoded memory operand: imm=" << decoded.imm << ", rs1=x" << decoded.rs1 << endl;
+                } catch (exception& e) {
+                    cerr << "ERROR: Failed to parse memory operand: " << e.what() << endl;
+                }
+            } else {
+                cerr << "ERROR: Malformed memory operand: " << decoded.operands[1] << endl;
+            }
+        }
+    }
+    
+    // Initialize operands with register values
     if (decoded.rs1 != -1)
         decoded.op1 = registers[decoded.rs1];
     if (decoded.rs2 != -1)
         decoded.op2 = registers[decoded.rs2];
+        
     return decoded;
 }
 
-PipelineInstruction Cores::memory(const PipelineInstruction &pInstr, std::vector<int>& mem) {
+PipelineInstruction Cores::memory(const PipelineInstruction &pInstr, vector<int>& mem) {
     PipelineInstruction m = pInstr;
     cout << "Core " << coreid << " memory: " << m.instruction 
          << " (PC = " << m.pc << ")\n";
@@ -231,19 +353,67 @@ PipelineInstruction Cores::writeback(const PipelineInstruction &pInstr) {
     return wb;
 }
 
-PipelineInstruction Cores::fetch(int pc, std::vector<std::string>& program) {
+PipelineInstruction Cores::fetch(int pc, vector<string>& program) {
     PipelineInstruction fetched;
-    if (pc >= static_cast<int>(program.size()))
+    fetched.valid = false;
+    
+    if (pc < 0 || pc >= program.size()) {
+        cout << "Core " << coreid << " fetch: PC out of bounds " << pc << endl;
         return fetched;
-    fetched.valid = true;
+    }
+    
+    string line = program[pc];
     fetched.pc = pc;
-    fetched.instruction = program[pc];
-    std::istringstream iss(program[pc]);
+    fetched.instruction = line;
+    
+    // Skip empty lines
+    if (line.empty() || line.find_first_not_of(" \t") == string::npos) {
+        return fetched;
+    }
+    
+    // Handle label-only lines like "equal:"
+    size_t colonPos = line.find(':');
+    if (colonPos != string::npos) {
+        // Extract text after colon, if any (trim leading whitespace)
+        string afterColon = line.substr(colonPos + 1);
+        size_t firstNonWS = afterColon.find_first_not_of(" \t");
+        
+        if (firstNonWS == string::npos) {
+            // Just a label - return invalid instruction
+            return fetched;
+        } else {
+            // Label with instruction — strip the label part and use only instruction
+            line = afterColon.substr(firstNonWS);
+        }
+    }
+    
+    // Now parse the instruction
+    istringstream iss(line);
     iss >> fetched.opcode;
-    std::string operand;
-    while (iss >> operand)
+    
+    // Skip comment lines
+    if (fetched.opcode[0] == '#' || fetched.opcode[0] == '/' || fetched.opcode[0] == ';') {
+        return fetched;
+    }
+    
+    string operand;
+    while (iss >> operand) {
+        // Remove commas from operands
+        if (!operand.empty() && operand.back() == ',') {
+            operand.pop_back();
+        }
+        
+        // Skip comments within the line
+        if (operand[0] == '#' || operand.substr(0, 2) == "//") {
+            break;
+        }
+        
         fetched.operands.push_back(operand);
-    cout << "Core " << coreid << " fetch: " << program[pc]
-         << " (PC = " << pc << ")\n";
+    }
+    
+    fetched.valid = true;
+    cout << "Core " << coreid << " fetch: " << fetched.instruction
+         << " (PC = " << fetched.pc << ")\n";
+    
     return fetched;
 }
