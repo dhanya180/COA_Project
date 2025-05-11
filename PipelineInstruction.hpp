@@ -33,6 +33,11 @@ struct PipelineInstruction {
     // Control flow flags
     bool isControlInstruction = false;
     bool branchTaken = false;
+    
+    // Cache-related fields
+    int memoryAddress = 0;     // Memory address being accessed
+    int memoryCycles = 0;      // Number of cycles the memory operation takes
+    bool waitingForMemory = false;  // Whether the instruction is waiting for memory
 };
 
 #endif // PIPELINE_INSTRUCTION_HPP

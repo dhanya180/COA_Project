@@ -20,19 +20,20 @@ public:
     
     int operandToReg(const std::string &op);
 
-    // Execute stage: when execCyclesRemaining==1, perform the operation.
-    int execute(PipelineInstruction &pInstr, std::vector<int>& mem,
-        std::unordered_map<std::string, int>& labels,
-        std::unordered_map<std::string, int>& data);
-
-    // Decode stage: parse the instruction to extract register numbers.
+    PipelineInstruction fetch(int pc, std::vector<std::string>& program);
     PipelineInstruction decode(const PipelineInstruction &pInstr);
-
+    int execute(PipelineInstruction &pInstr, std::vector<int>& mem,
+                std::unordered_map<std::string, int>& labels,
+                std::unordered_map<std::string, int>& data);
     PipelineInstruction memory(const PipelineInstruction &pInstr, std::vector<int>& mem);
-
     PipelineInstruction writeback(const PipelineInstruction &pInstr);
 
-    PipelineInstruction fetch(int pc, std::vector<std::string>& program);
+    // Cache related methods
+    void setCacheHierarchy(class CacheHierarchy* cache) { cacheHierarchy = cache; }
+
+private:
+    // Pointer to the cache hierarchy
+    class CacheHierarchy* cacheHierarchy;
 };
 
 #endif // CORES_HPP

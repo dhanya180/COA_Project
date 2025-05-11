@@ -1,11 +1,12 @@
 #include "Cores.hpp"
+#include "CacheHierarchy.hpp"
 #include <iostream>
 #include <sstream>
 #include <algorithm>
 
 using namespace std;
 
-Cores::Cores(int cid) : registers(32, 0), coreid(cid), pc(0) {
+Cores::Cores(int cid) : registers(32, 0), coreid(cid), pc(0), newPC(0), skipExecution(false), cacheHierarchy(nullptr) {
     registers[31] = cid;
 }
 
@@ -163,13 +164,24 @@ int Cores::execute(PipelineInstruction &pInstr, vector<int>& mem,
 
         // Step 2: Calculate offset in words
         int mem_index = base_mem_index + (pInstr.imm / 4);
-
+        
+        // Calculate physical memory address (byte addressable)
+        int physAddr = pInstr.imm;
+        pInstr.memoryAddress = physAddr;
+        
         // Debugging Output
         cout << "Base register (x" << pInstr.rs1 << ") mapped to mem[0]" << endl;
         cout << "imm: " << pInstr.imm << ", Target Mem Index: " << mem_index << endl;
 
         // Step 3: Check bounds and store
         if (mem_index >= 0 && mem_index < mem.size()) {
+            // Access cache for the store operation
+            if (cacheHierarchy) {
+                int latency = cacheHierarchy->accessDataCache(physAddr, true, mem);
+                pInstr.memoryCycles = latency;
+                cout << "Cache store to address 0x" << hex << physAddr << " took " << dec << latency << " cycles" << endl;
+            }
+            
             mem[mem_index] = pInstr.op2;
             cout << "Stored " << pInstr.op2
                 << " from x" << pInstr.rs2
@@ -184,13 +196,24 @@ int Cores::execute(PipelineInstruction &pInstr, vector<int>& mem,
 
         // Step 2: Calculate offset in words
         int mem_index = base_mem_index + (pInstr.imm / 4);
+        
+        // Calculate physical memory address (byte addressable)
+        int physAddr = pInstr.imm;
+        pInstr.memoryAddress = physAddr;
 
         // Debugging Output
         cout << "Base register (x" << pInstr.rs1 << ") mapped to mem[0]" << endl;
         cout << "imm: " << pInstr.imm << ", Target Mem Index: " << mem_index << endl;
 
-        // Step 3: Check bounds and store
+        // Step 3: Check bounds and load
         if (mem_index >= 0 && mem_index < mem.size()) {
+            // Access cache for the load operation
+            if (cacheHierarchy) {
+                int latency = cacheHierarchy->accessDataCache(physAddr, false, mem);
+                pInstr.memoryCycles = latency;
+                cout << "Cache load from address 0x" << hex << physAddr << " took " << dec << latency << " cycles" << endl;
+            }
+            
             result = mem[mem_index];
             registers[pInstr.rd] = result;
             cout << "Loaded " << result
@@ -343,6 +366,12 @@ PipelineInstruction Cores::memory(const PipelineInstruction &pInstr, vector<int>
     PipelineInstruction m = pInstr;
     cout << "Core " << coreid << " memory: " << m.instruction 
          << " (PC = " << m.pc << ")\n";
+    
+    // If this is a memory instruction that accessed cache, report cycles
+    if (m.isMemoryInstruction && m.memoryCycles > 0) {
+        cout << "Memory operation took " << m.memoryCycles << " cache cycles" << endl;
+    }
+    
     return m;
 }
 
@@ -360,6 +389,20 @@ PipelineInstruction Cores::fetch(int pc, vector<string>& program) {
     if (pc < 0 || pc >= program.size()) {
         cout << "Core " << coreid << " fetch: PC out of bounds " << pc << endl;
         return fetched;
+    }
+    
+    // Access instruction cache for the current PC
+    // Convert PC to a byte address (assuming 4 bytes per instruction)
+    int instrAddr = pc * 4;
+    
+    // Check if we have a cache hierarchy
+    if (cacheHierarchy) {
+        // Access instruction cache
+        vector<int> dummyVector;
+        int iCacheLatency = cacheHierarchy->accessInstructionCache(instrAddr, dummyVector);
+        cout << "Core " << coreid << " instruction fetch from address 0x" << hex << instrAddr 
+             << " took " << dec << iCacheLatency << " cycles" << endl;
+        fetched.memoryCycles = iCacheLatency;
     }
     
     string line = program[pc];

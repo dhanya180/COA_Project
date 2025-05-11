@@ -63,6 +63,14 @@ int main() {
     cout << "Enter latency for MUL: ";
     cin >> lat;
     sim.latencies["MUL"] = lat;
+    
+    // Initialize cache with configuration
+    string cacheConfigFile;
+    cout << "Enter cache configuration file (leave empty for default): ";
+    cin.ignore(); // Clear the newline from previous input
+    getline(cin, cacheConfigFile);
+    
+    sim.initializeCache(cacheConfigFile.empty() ? "cache_config.txt" : cacheConfigFile);
 
     sim.run();
     cout << "\nProgram size: " << program.size() << "\n";
