@@ -28,6 +28,41 @@ int Cores::operandToReg(const string &op) {
         }
     }
 }
+int Cores::executeSPMAccess(PipelineInstruction &pInstr, int &data) {
+    bool isStore = (pInstr.opcode == "SW_SPM");
+    int idx      = pInstr.imm;           // immediate is the direct word-index
+    pInstr.memoryAddress = idx;
+
+    cout << "SPM " << (isStore ? "store" : "load")
+         << " at mem[" << idx << "]\n";
+
+    int accessTime;
+    // Grab the ScratchpadMemory instance from your cache hierarchy
+    auto spm = cacheHierarchy->getScratchpadMemory();
+
+    if (isStore) {
+        // For stores, pull the value to write out of pInstr.op2
+        data = pInstr.op2;
+        if (!spm->write(idx, data, accessTime)) {
+            cerr << "SPM write OOB at mem[" << idx << "]\n";
+            return 0;
+        }
+    } else {
+        // For loads, let read() fill in `data`
+        if (!spm->read(idx, data, accessTime)) {
+            cerr << "SPM read OOB at mem[" << idx << "]\n";
+            return 0;
+        }
+        // Write the loaded value back into the register file
+        registers[pInstr.rd] = data;
+        pInstr.aluResult     = data;
+    }
+
+    pInstr.memoryCycles = accessTime;
+    cout << "→ Took " << accessTime << " cycles\n";
+    return accessTime;
+}
+
 
 // Execute stage: when execCyclesRemaining==1, perform the operation.
 int Cores::execute(PipelineInstruction &pInstr, vector<int>& mem,
@@ -223,6 +258,23 @@ int Cores::execute(PipelineInstruction &pInstr, vector<int>& mem,
             cerr << "Error: Memory access out of bounds at mem[" << mem_index << "]\n";
         }
     }
+    else if (opcode == "LW_SPM") {
+        int loadedData = 0;
+        executeSPMAccess(pInstr, loadedData);
+        
+        // Store loaded data to register
+        if (pInstr.rd != 0) {
+            registers[pInstr.rd] = loadedData;
+            cout << "Loaded " << loadedData << " to x" << pInstr.rd << " from SPM\n";
+        }
+        result = loadedData;
+    }
+    else if (opcode == "SW_SPM") {
+        int storeData = pInstr.op2;  // Value from source register
+        executeSPMAccess(pInstr, storeData);
+        
+        cout << "Stored " << storeData << " from x" << pInstr.rs2 << " to SPM\n";
+    }
     else if (opcode == "LA") {
         if (data.count(pInstr.operands[1])) {
             result = data[pInstr.operands[1]];
@@ -245,6 +297,7 @@ int Cores::execute(PipelineInstruction &pInstr, vector<int>& mem,
         cout << "System call executed\n";
     }
     
+    
     pInstr.aluResult = result;
     return branchTaken ? 1 : 0;
 }
@@ -265,7 +318,7 @@ PipelineInstruction Cores::decode(const PipelineInstruction &pInstr) {
         "ADD", "SUB", "ADDI", "MUL", "LI",
         "LW", "SW", "JAL", "LA", "J",
         "BEQ", "BLE", "BNE",
-        "NOP", "ECALL"
+        "NOP", "ECALL", "LW_SPM", "SW_SPM"
     };
     
     if (find(validOpcodes.begin(), validOpcodes.end(), op) == validOpcodes.end()) {
@@ -352,6 +405,42 @@ PipelineInstruction Cores::decode(const PipelineInstruction &pInstr) {
             }
         }
     }
+    if (op == "LW_SPM" || op == "SW_SPM") {
+    // Flag SPM instructions
+    decoded.isMemoryInstruction = true;
+    
+    // Flag load instructions separately
+    if (op == "LW_SPM") {
+        decoded.isLoadInstruction = true;
+        decoded.rd = operandToReg(decoded.operands[0]);
+    } else if (op == "SW_SPM") {
+        decoded.rd = -1;  // No destination register for SW_SPM
+        decoded.rs2 = operandToReg(decoded.operands[0]);
+    }
+
+    // Parse memory operand format: offset(base)
+    if (decoded.operands.size() >= 2) {
+        // Same parsing as regular load/store
+        size_t open_bracket = decoded.operands[1].find('(');
+        size_t close_bracket = decoded.operands[1].find(')');
+        
+        if (open_bracket != string::npos && close_bracket != string::npos) {
+            string imm_str = decoded.operands[1].substr(0, open_bracket);
+            string reg_str = decoded.operands[1].substr(open_bracket + 1, close_bracket - open_bracket - 1);
+            
+            try {
+                decoded.imm = stoi(imm_str);
+                decoded.rs1 = operandToReg(reg_str);
+                
+                cout << "Decoded SPM operand: imm=" << decoded.imm << ", rs1=x" << decoded.rs1 << endl;
+            } catch (exception& e) {
+                cerr << "ERROR: Failed to parse SPM operand: " << e.what() << endl;
+            }
+        } else {
+            cerr << "ERROR: Malformed SPM operand: " << decoded.operands[1] << endl;
+        }
+    }
+}
     
     // Initialize operands with register values
     if (decoded.rs1 != -1)

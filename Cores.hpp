@@ -15,7 +15,10 @@ public:
     bool flushRequired = false;
     int newPC = 0;
     bool skipExecution = false;
+    int executeSPMAccess(PipelineInstruction &pInstr, int& data);
 
+        // Pointer to the cache hierarchy
+    class CacheHierarchy* cacheHierarchy;
     Cores(int cid);
     
     int operandToReg(const std::string &op);
@@ -31,9 +34,7 @@ public:
     // Cache related methods
     void setCacheHierarchy(class CacheHierarchy* cache) { cacheHierarchy = cache; }
 
-private:
-    // Pointer to the cache hierarchy
-    class CacheHierarchy* cacheHierarchy;
+
 };
 
 #endif // CORES_HPP

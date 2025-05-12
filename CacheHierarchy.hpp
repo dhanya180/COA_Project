@@ -2,6 +2,7 @@
 #define CACHE_HIERARCHY_HPP
 
 #include "Cache.hpp"
+#include "ScratchpadMemory.hpp"
 #include <vector>
 #include <memory>
 
@@ -12,7 +13,7 @@ private:
     std::unique_ptr<Cache> l2;   // L2 Unified Cache
     
     int mainMemoryLatency;
-    
+    std::unique_ptr<ScratchpadMemory> spm;
     // Statistics
     int totalMemoryAccesses;
     int totalMemoryStalls;
@@ -27,6 +28,9 @@ public:
     // Memory access functions
     int accessInstructionCache(int address, std::vector<int>& memory);
     int accessDataCache(int address, bool isWrite, std::vector<int>& memory);
+
+    int accessScratchpadMemory(int address, bool isWrite, int data, std::vector<int>& memory);
+    ScratchpadMemory* getScratchpadMemory() const { return spm.get(); }
     
     // Statistics
     void printStats();

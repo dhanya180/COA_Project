@@ -25,6 +25,9 @@ void Simulator::initializeCache(const string& configFile) {
         config.l2_size, config.l2_block_size, config.l2_assoc, config.l2_latency,
         config.main_memory_latency, config.policy
     );
+    for (auto& core : cores) {
+    core.cacheHierarchy = cacheHierarchy.get();
+}
     
     cout << "Cache hierarchy initialized successfully." << endl;
 }
@@ -123,7 +126,41 @@ void Simulator::run() {
     vector<PipelineInstruction> ex_mem(cores.size());
     vector<PipelineInstruction> mem_wb(cores.size());
     
-    vector<int> fetch_pc(cores.size(), 0);
+    //vector<int> fetch_pc(cores.size(), 0);
+        
+        int textStartIndex = -1;
+            for (int i = 0; i < program.size(); ++i) {
+                if (program[i].find(".text") != string::npos) {
+                    textStartIndex = i + 1;
+                    break;
+                }
+            }
+
+            vector<string> textSegment;
+
+            if (textStartIndex != -1) {
+                // .text found → trim to just code
+                for (int i = textStartIndex; i < program.size(); ++i)
+                    textSegment.push_back(program[i]);
+            } else {
+                // .text not found → assume everything is code except .data section
+                bool inData = false;
+                for (const string& line : program) {
+                    if (line.find(".data") != string::npos) {
+                        inData = true;
+                        continue;
+                    }
+                    if (line.find(".word") != string::npos || line.find(".string") != string::npos)
+                        continue;
+                    if (inData && line.find(":") != string::npos)
+                        continue;
+
+                    textSegment.push_back(line);
+                }
+            }
+
+            program = textSegment;
+            vector<int> fetch_pc(cores.size(), 0);
     
     bool program_complete = false;
     
@@ -185,6 +222,24 @@ void Simulator::run() {
                         continue;  // Skip to next iteration
                     }
                 }
+                if (mem_wb[i].opcode == "LW_SPM" || mem_wb[i].opcode == "SW_SPM") {
+    // For SPM instructions, we handle the access directly through executeSPMAccess
+    // which was called in the execute stage
+    int address = mem_wb[i].memoryAddress;
+    bool isWrite = mem_wb[i].opcode == "SW_SPM";
+    
+    // If we need to wait for SPM access to complete
+    if (mem_wb[i].memoryCycles > 1) {
+        ex_mem[i].waitingForMemory = true;
+        ex_mem[i].memoryCycles = mem_wb[i].memoryCycles - 1;
+        stallCount++;
+        cout << "Core " << i << " waiting for SPM access, "
+             << ex_mem[i].memoryCycles << " cycles remaining" << endl;
+        continue;  // Skip to next iteration
+    }
+}
+
+
                 
                 cores[i].memory(mem_wb[i], memory);
                 ex_mem[i].valid = false;
@@ -460,12 +515,12 @@ void Simulator::display() {
     }
     
     cout << "Memory: ";
-    for (int i = 0; i < 16; ++i) {
-        cout << setw(3) << memory[i] << " ";
+    for (int i = 0; i < 1024; ++i) {
+        cout << setw(2) << memory[i] << " ";
     }
     cout << endl;
     
-    cout << "Total clock cycles: " << clock << "\n";
+    cout << "Total Pipline clock cycles: " << clock << "\n";
     cout << "Total instructions executed: " << instructionsExecuted << "\n";
     cout << "Total data hazard stalls: " << stallCount << "\n";
     cout << "Total control hazard flushes: " << controlHazardCount << "\n";
@@ -473,7 +528,8 @@ void Simulator::display() {
     
     double ipc = (clock > 0) ? static_cast<double>(instructionsExecuted)/clock : 0;
     cout << "IPC: " << ipc << "\n";
-    
+    cout << "Scratchpad Memory:" << endl;
+    cacheHierarchy->getScratchpadMemory()->printContents();
     // Print cache statistics
     cacheHierarchy->printStats();
 }

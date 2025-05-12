@@ -1,13 +1,13 @@
 # Cache Configuration File
 
 # L1 Instruction Cache
-L1I_SIZE = 32768        # 32 KB
+L1I_SIZE = 4096        # 4 KB
 L1I_BLOCK_SIZE = 64     # 64 bytes
 L1I_ASSOC = 4           # 4-way set associative  
 L1I_LATENCY = 1         # 1 cycle
 
 # L1 Data Cache
-L1D_SIZE = 32768        # 32 KB
+L1D_SIZE = 4096       # 4 KB
 L1D_BLOCK_SIZE = 64     # 64 bytes
 L1D_ASSOC = 8           # 8-way set associative
 L1D_LATENCY = 1         # 1 cycle
@@ -19,7 +19,7 @@ L2_ASSOC = 8            # 8-way set associative
 L2_LATENCY = 10         # 10 cycles
 
 # Main Memory
-MAIN_MEMORY_LATENCY = 100  # 100 cycles
+MAIN_MEMORY_LATENCY = 20  # 100 cycles
 
 # Replacement Policy (LRU, FIFO, or RANDOM)
 REPLACEMENT_POLICY = LRU

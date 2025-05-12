@@ -163,6 +163,10 @@ void Cache::printStats() {
     cout << "  Misses: " << misses << endl;
     cout << "  Miss rate: " << (getMissRate() * 100) << "%" << endl;
 }
+int Cache::getAccessLatency() {
+    return accessLatency;
+}
+
 
 string Cache::getTypeString() {
     switch (type) {

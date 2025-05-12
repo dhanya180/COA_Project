@@ -29,7 +29,6 @@ struct PipelineInstruction {
     // Flag to indicate if this is a memory instruction (for forwarding)
     bool isMemoryInstruction = false;
     bool isLoadInstruction = false;  // Specific flag for load instructions
-    
     // Control flow flags
     bool isControlInstruction = false;
     bool branchTaken = false;

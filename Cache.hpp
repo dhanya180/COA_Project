@@ -76,6 +76,7 @@ public:
     int getHits();
     int getMisses();
     void resetStats();
+    int getAccessLatency();
     
     // Debug/display functions
     void printStats();
