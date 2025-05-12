@@ -6,9 +6,52 @@
 
 using namespace std;
 
+// Static members initialization
+bool* Cores::sync_flags = nullptr;
+int Cores::sync_barrier_count = 0;
+bool Cores::sync_phase_complete = false;
+
 Cores::Cores(int cid) : registers(32, 0), coreid(cid), pc(0), newPC(0), skipExecution(false), cacheHierarchy(nullptr) {
     registers[31] = cid;
+    
+    // Lazy initialization of sync flags
+    if (sync_flags == nullptr) {
+        sync_flags = new bool[TOTAL_CORES]();
+    }
 }
+
+bool Cores::handleSync(PipelineInstruction& pInstr) {
+    // Mark this core's sync flag
+    sync_flags[coreid] = true;
+    
+    // Atomically increment the barrier count
+    __sync_fetch_and_add(&sync_barrier_count, 1);
+    
+    // Check if all cores have reached the sync point
+    if (sync_barrier_count == TOTAL_CORES) {
+        // Reset for next sync
+        sync_barrier_count = 0;
+        
+        // Reset all core flags
+        for (int i = 0; i < TOTAL_CORES; ++i) {
+            sync_flags[i] = false;
+        }
+        
+        // Mark sync phase as complete
+        sync_phase_complete = true;
+        
+        cout << "Core " << coreid << ": All cores synchronized" << endl;
+        return true;
+    }
+    
+    // This core has to wait
+    cout << "Core " << coreid << ": Waiting at SYNC barrier" << endl;
+    return false;
+}
+
+bool branch_redirect = false;
+bool fetch_stall = false;
+uint32_t branch_target = 0;
 
 int Cores::operandToReg(const string &op) {
     string tmp = op;
@@ -126,6 +169,16 @@ int Cores::execute(PipelineInstruction &pInstr, vector<int>& mem,
             newPC = labels[pInstr.operands[0]];
             branchTaken = true;
             pInstr.branchTaken = true;
+            // Set this flag to ensure pipeline flushing happens
+            pInstr.isControlInstruction = true;
+            for (int j = 0; j < TOTAL_CORES; ++j) {
+            if (j == coreid) {
+                skipExecution = true;
+            }
+            else{
+                skipExecution = true;
+            }
+        }
             cout << "Jump to " << pInstr.operands[0] << " at PC = " << newPC << "\n";
         } else {
             cerr << "ERROR: Jump label not found: " << pInstr.operands[0] << endl;
@@ -139,6 +192,7 @@ int Cores::execute(PipelineInstruction &pInstr, vector<int>& mem,
                 branchTaken = true;
                 pInstr.branchTaken = true;
                 cout << "BEQ branch taken to " << pInstr.operands[2] << " at PC = " << newPC << "\n";
+
             } else {
                 cerr << "ERROR: BEQ label not found: " << pInstr.operands[2] << endl;
             }
@@ -194,61 +248,42 @@ int Cores::execute(PipelineInstruction &pInstr, vector<int>& mem,
         }
     }
     else if (opcode == "SW") {
-        // Step 1: Base register is logically mapped to mem[0]
-        int base_mem_index = 0;
+    int addr = registers[pInstr.rs1] + pInstr.imm;
+    int mem_index = addr / 4;
+    pInstr.memoryAddress = addr;
 
-        // Step 2: Calculate offset in words
-        int mem_index = base_mem_index + (pInstr.imm / 4);
-        
-        // Calculate physical memory address (byte addressable)
-        int physAddr = pInstr.imm;
-        pInstr.memoryAddress = physAddr;
-        
-        // Debugging Output
-        cout << "Base register (x" << pInstr.rs1 << ") mapped to mem[0]" << endl;
-        cout << "imm: " << pInstr.imm << ", Target Mem Index: " << mem_index << endl;
+    cout << "Base register (x" << pInstr.rs1 << ") has address " << registers[pInstr.rs1] << "\n";
+    cout << "imm: " << pInstr.imm << ", Effective address: " << addr << ", Target Mem Index: " << mem_index << endl;
 
-        // Step 3: Check bounds and store
-        if (mem_index >= 0 && mem_index < mem.size()) {
-            // Access cache for the store operation
-            if (cacheHierarchy) {
-                int latency = cacheHierarchy->accessDataCache(physAddr, true, mem);
-                pInstr.memoryCycles = latency;
-                cout << "Cache store to address 0x" << hex << physAddr << " took " << dec << latency << " cycles" << endl;
-            }
-            
-            mem[mem_index] = pInstr.op2;
-            cout << "Stored " << pInstr.op2
-                << " from x" << pInstr.rs2
-                << " to mem[" << mem_index << "]\n";
-        } else {
-            cerr << "Error: Memory access out of bounds at mem[" << mem_index << "]\n";
+    if (mem_index >= 0 && mem_index < mem.size()) {
+        if (cacheHierarchy) {
+            int latency = cacheHierarchy->accessDataCache(addr, true, mem);
+            pInstr.memoryCycles = latency;
+            cout << "Cache store to address 0x" << hex << addr << " took " << dec << latency << " cycles" << endl;
         }
+        mem[mem_index] = pInstr.op2;
+        cout << "Stored " << pInstr.op2
+             << " from x" << pInstr.rs2
+             << " to mem[" << mem_index << "]\n";
+    } else {
+        cerr << "Error: Memory access out of bounds at mem[" << mem_index << "]\n";
     }
+}
+
     else if (opcode == "LW") {
-        // Step 1: Base register is logically mapped to mem[0]
-        int base_mem_index = 0;
+        int addr = registers[pInstr.rs1] + pInstr.imm;
+        int mem_index = addr / 4;
+        pInstr.memoryAddress = addr;
 
-        // Step 2: Calculate offset in words
-        int mem_index = base_mem_index + (pInstr.imm / 4);
-        
-        // Calculate physical memory address (byte addressable)
-        int physAddr = pInstr.imm;
-        pInstr.memoryAddress = physAddr;
+        cout << "Base register (x" << pInstr.rs1 << ") has address " << registers[pInstr.rs1] << "\n";
+        cout << "imm: " << pInstr.imm << ", Effective address: " << addr << ", Target Mem Index: " << mem_index << endl;
 
-        // Debugging Output
-        cout << "Base register (x" << pInstr.rs1 << ") mapped to mem[0]" << endl;
-        cout << "imm: " << pInstr.imm << ", Target Mem Index: " << mem_index << endl;
-
-        // Step 3: Check bounds and load
         if (mem_index >= 0 && mem_index < mem.size()) {
-            // Access cache for the load operation
             if (cacheHierarchy) {
-                int latency = cacheHierarchy->accessDataCache(physAddr, false, mem);
+                int latency = cacheHierarchy->accessDataCache(addr, false, mem);
                 pInstr.memoryCycles = latency;
-                cout << "Cache load from address 0x" << hex << physAddr << " took " << dec << latency << " cycles" << endl;
+                cout << "Cache load from address 0x" << hex << addr << " took " << dec << latency << " cycles" << endl;
             }
-            
             result = mem[mem_index];
             registers[pInstr.rd] = result;
             cout << "Loaded " << result
@@ -257,6 +292,18 @@ int Cores::execute(PipelineInstruction &pInstr, vector<int>& mem,
         } else {
             cerr << "Error: Memory access out of bounds at mem[" << mem_index << "]\n";
         }
+    }
+    else if (opcode == "SYNC") {
+        pInstr.isSyncInstruction = true;
+        
+        // If sync is not complete, the core is stalled
+        if (!handleSync(pInstr)) {
+            pInstr.stalled = true;
+            return 0;
+        }
+        
+        // If we reach here, sync is complete
+        return 0;
     }
     else if (opcode == "LW_SPM") {
         int loadedData = 0;
@@ -305,20 +352,24 @@ int Cores::execute(PipelineInstruction &pInstr, vector<int>& mem,
 // Decode stage: parse the instruction to extract register numbers.
 PipelineInstruction Cores::decode(const PipelineInstruction &pInstr) {
     PipelineInstruction decoded = pInstr;
+    cout<<pInstr.instruction<<endl;
     cout << "Core " << coreid << " decoding: " << decoded.instruction
         << " (PC = " << decoded.pc << ")\n";
 
     // Normalize opcode to uppercase for case-insensitive comparison
     string op = decoded.opcode;
+    cout<<"Decode Opcode "<<decoded.opcode<<endl;
     transform(op.begin(), op.end(), op.begin(), ::toupper);
     decoded.opcode = op;
+    cout<<"DECodes Opcode "<<decoded.opcode<<endl;
     
     // List of valid opcodes
     vector<string> validOpcodes = {
         "ADD", "SUB", "ADDI", "MUL", "LI",
         "LW", "SW", "JAL", "LA", "J",
         "BEQ", "BLE", "BNE",
-        "NOP", "ECALL", "LW_SPM", "SW_SPM"
+        "NOP", "ECALL", "SYNC",
+        "LW_SPM", "SW_SPM"
     };
     
     if (find(validOpcodes.begin(), validOpcodes.end(), op) == validOpcodes.end()) {
@@ -366,6 +417,7 @@ PipelineInstruction Cores::decode(const PipelineInstruction &pInstr) {
         if (decoded.operands.size() >= 3) {
             decoded.rs1 = operandToReg(decoded.operands[1]);
             decoded.imm = stoi(decoded.operands[2]);
+            
         }
     }
     
@@ -404,6 +456,10 @@ PipelineInstruction Cores::decode(const PipelineInstruction &pInstr) {
                 cerr << "ERROR: Malformed memory operand: " << decoded.operands[1] << endl;
             }
         }
+    }
+    if (op == "SYNC") {
+        decoded.isSyncInstruction = true;
+        return decoded;
     }
     if (op == "LW_SPM" || op == "SW_SPM") {
     // Flag SPM instructions
@@ -474,7 +530,8 @@ PipelineInstruction Cores::writeback(const PipelineInstruction &pInstr) {
 PipelineInstruction Cores::fetch(int pc, vector<string>& program) {
     PipelineInstruction fetched;
     fetched.valid = false;
-    
+    cout<<"Fetching Pc: "<<pc<<endl;
+
     if (pc < 0 || pc >= program.size()) {
         cout << "Core " << coreid << " fetch: PC out of bounds " << pc << endl;
         return fetched;
@@ -500,6 +557,7 @@ PipelineInstruction Cores::fetch(int pc, vector<string>& program) {
     
     // Skip empty lines
     if (line.empty() || line.find_first_not_of(" \t") == string::npos) {
+        cout << "Empty or whitespace line at PC " << pc << endl;
         return fetched;
     }
     

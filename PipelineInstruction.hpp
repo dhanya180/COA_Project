@@ -37,6 +37,9 @@ struct PipelineInstruction {
     int memoryAddress = 0;     // Memory address being accessed
     int memoryCycles = 0;      // Number of cycles the memory operation takes
     bool waitingForMemory = false;  // Whether the instruction is waiting for memory
+    
+    // SYNC instruction specific flags
+    bool isSyncInstruction = false;  // Flag to identify SYNC instruction
 };
 
 #endif // PIPELINE_INSTRUCTION_HPP

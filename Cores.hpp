@@ -15,9 +15,18 @@ public:
     bool flushRequired = false;
     int newPC = 0;
     bool skipExecution = false;
-    int executeSPMAccess(PipelineInstruction &pInstr, int& data);
 
-        // Pointer to the cache hierarchy
+    bool branch_redirect = false;
+    bool fetch_stall = false;
+    int branch_target = 0;
+
+    // New synchronization variables
+    static bool* sync_flags;      // Flags for each core's sync status
+    static int sync_barrier_count;  // Count of cores that have reached sync point
+    static const int TOTAL_CORES = 4;  // Total number of cores
+    static bool sync_phase_complete;  // Indicates if sync phase is complete
+    
+    // Pointer to the cache hierarchy
     class CacheHierarchy* cacheHierarchy;
     Cores(int cid);
     
@@ -31,9 +40,13 @@ public:
     PipelineInstruction memory(const PipelineInstruction &pInstr, std::vector<int>& mem);
     PipelineInstruction writeback(const PipelineInstruction &pInstr);
 
+    int executeSPMAccess(PipelineInstruction &pInstr, int& data);
+
     // Cache related methods
     void setCacheHierarchy(class CacheHierarchy* cache) { cacheHierarchy = cache; }
 
+    // Function to handle synchronization
+    bool handleSync(PipelineInstruction& pInstr);
 
 };
 

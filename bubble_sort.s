@@ -1,50 +1,40 @@
-.data
-arr: .word 0x3 0x2 0x0 0x5 0x1 
-str: .string "\nAfter Bubble Sort : "
-space: .string " "
+    .data
+arr: .word 3, 2, 0, 5, 1
+n:   .word 5
 
-.text
-addi x1 x0 5 #n
-addi x2 x1 -1 #n-1
-addi x4 x0 0 #i
+    .text
+    la   x10, n
+    lw   x1, 0(x10)       
+    addi x2, x1, -1       
 
-Loop1:
-    beq x4 x1 exit
-    addi x5 x0 0 #j
-    sub x6 x2 x4 #n-1-i
-    la x3 arr
-    ble x5 x6 Loop2
-Loop2:
-    lw x7 0(x3)
-    lw x8 4(x3)
-    ble x7 x8 exit1
-    beq x5 x6 exit2
-    sw x8 0(x3)
-    sw x7 4(x3)
-     
-exit1:
-    addi x3 x3 4
-    addi x5 x5 1
-    ble x5 x6 Loop2
-exit2:
-    addi x4 x4 1
-    ble x4 x2 Loop1       
-exit:
-    li a7 4
-    la a0 str
-    ecall
-    la x3 arr
-print:
-    beq x11 x1 exit3
-    li a7 1
-    lw a0 0(x3)
-    ecall
-    li a7 4
-    la a0 space
-    ecall
-    addi x3 x3 4
-    addi x11 x11 1
-    j print
-exit3:
-    li a7 10
-    ecall
+    la   x3, arr          
+    addi x4, x0, 0        
+
+Outer_Loop:
+    beq  x4, x2, Done    
+    addi x5, x0, 0        
+
+Inner_Loop:
+    sub  x6, x2, x4      
+    beq  x5, x6, End_Inner
+    add  x8, x5, x5      
+    add  x8, x8, x5      
+    add  x8, x8, x5      
+    add  x7, x3, x8      
+    lw   x9, 0(x7)        
+    lw   x10, 4(x7)      
+
+    ble  x9, x10, Skip_Swap
+    sw   x10, 0(x7)
+    sw   x9, 4(x7)
+
+Skip_Swap:
+    addi x5, x5, 1        
+    bne  x0, x0, Inner_Loop
+
+End_Inner:
+    addi x4, x4, 1       
+    bne  x0, x0, Outer_Loop
+
+Done:
+    nop                 
