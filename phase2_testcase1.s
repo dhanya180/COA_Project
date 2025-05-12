@@ -1,6 +1,5 @@
 .data
-sum: .word 0        # Reserve a memory location for the sum
-
+sum: .word 0        
 .text
     addi x1, x0, 1       # x1 = 1 (initial value)
     addi x2, x0, 6       # x2 = 6 (loop counter + 1 to handle bne logic)

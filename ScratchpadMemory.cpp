@@ -52,7 +52,6 @@ int ScratchpadMemory::getAccessLatency() const {
 void ScratchpadMemory::printContents() const {
     cout << "Scratchpad Memory Contents:" << endl;
     for (size_t i = 0; i < memory.size(); ++i) {
-        //if (i % 4 == 0) cout << endl << "0x" << hex << (i * wordSize) << dec << ": ";
         cout << setw(2) << memory[i] << " ";
     }
     cout << endl;

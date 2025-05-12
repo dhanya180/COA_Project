@@ -12,7 +12,7 @@ struct PipelineInstruction {
     std::string opcode;
     std::vector<std::string> operands;
     bool valid = false;
-    bool stalled = false; // indicates if the instruction is stalled
+    bool stalled = false; 
     int imm = 0;
 
     // For hazard detection.
@@ -24,22 +24,22 @@ struct PipelineInstruction {
     int op1 = 0;
     int op2 = 0;
     int aluResult = 0;
-    int execCyclesRemaining = 0;  // number of execute cycles remaining
+    int execCyclesRemaining = 0;  
     
     // Flag to indicate if this is a memory instruction (for forwarding)
     bool isMemoryInstruction = false;
-    bool isLoadInstruction = false;  // Specific flag for load instructions
+    bool isLoadInstruction = false; 
     // Control flow flags
     bool isControlInstruction = false;
     bool branchTaken = false;
     
     // Cache-related fields
-    int memoryAddress = 0;     // Memory address being accessed
-    int memoryCycles = 0;      // Number of cycles the memory operation takes
-    bool waitingForMemory = false;  // Whether the instruction is waiting for memory
+    int memoryAddress = 0;    
+    int memoryCycles = 0;      
+    bool waitingForMemory = false; 
     
     // SYNC instruction specific flags
-    bool isSyncInstruction = false;  // Flag to identify SYNC instruction
+    bool isSyncInstruction = false;  
 };
 
 #endif // PIPELINE_INSTRUCTION_HPP

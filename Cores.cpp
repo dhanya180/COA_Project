@@ -248,27 +248,27 @@ int Cores::execute(PipelineInstruction &pInstr, vector<int>& mem,
         }
     }
     else if (opcode == "SW") {
-    int addr = registers[pInstr.rs1] + pInstr.imm;
-    int mem_index = addr / 4;
-    pInstr.memoryAddress = addr;
+        int addr = registers[pInstr.rs1] + pInstr.imm;
+        int mem_index = addr / 4;
+        pInstr.memoryAddress = addr;
 
-    cout << "Base register (x" << pInstr.rs1 << ") has address " << registers[pInstr.rs1] << "\n";
-    cout << "imm: " << pInstr.imm << ", Effective address: " << addr << ", Target Mem Index: " << mem_index << endl;
+        cout << "Base register (x" << pInstr.rs1 << ") has address " << registers[pInstr.rs1] << "\n";
+        cout << "imm: " << pInstr.imm << ", Effective address: " << addr << ", Target Mem Index: " << mem_index << endl;
 
-    if (mem_index >= 0 && mem_index < mem.size()) {
-        if (cacheHierarchy) {
-            int latency = cacheHierarchy->accessDataCache(addr, true, mem);
-            pInstr.memoryCycles = latency;
-            cout << "Cache store to address 0x" << hex << addr << " took " << dec << latency << " cycles" << endl;
+        if (mem_index >= 0 && mem_index < mem.size()) {
+            if (cacheHierarchy) {
+                int latency = cacheHierarchy->accessDataCache(addr, true, mem);
+                pInstr.memoryCycles = latency;
+                cout << "Cache store to address 0x" << hex << addr << " took " << dec << latency << " cycles" << endl;
+            }
+            mem[mem_index] = pInstr.op2;
+            cout << "Stored " << pInstr.op2
+                << " from x" << pInstr.rs2
+                << " to mem[" << mem_index << "]\n";
+        } else {
+            cerr << "Error: Memory access out of bounds at mem[" << mem_index << "]\n";
         }
-        mem[mem_index] = pInstr.op2;
-        cout << "Stored " << pInstr.op2
-             << " from x" << pInstr.rs2
-             << " to mem[" << mem_index << "]\n";
-    } else {
-        cerr << "Error: Memory access out of bounds at mem[" << mem_index << "]\n";
     }
-}
 
     else if (opcode == "LW") {
         int addr = registers[pInstr.rs1] + pInstr.imm;
